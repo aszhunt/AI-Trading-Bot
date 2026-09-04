@@ -8,21 +8,9 @@ st.set_page_config(
     page_title="Pro AI Trading Signal Bot", page_icon="📈", layout="centered"
 )
 
-# Custom Styling for UI look
-st.markdown(
-    """
-    <style>
-    .main { background-color: #0e1117; }
-    .stMetric { background-color: #1a1c23; padding: 15px; border-radius: 10px; border: 1px solid #30333d; }
-    </style>
-""",
-    unsafe_allow_html=True,
-)
-
 st.title("🤖 Pro AI Trading Signal Bot")
 st.write(
-    "Advanced multi-indicator trend analysis engine for short-term (10-minute)"
-    " outlook."
+    "Real-time multi-indicator trend analysis engine for short-term outlook."
 )
 
 # Popular Trading Pairs Dictionary (Yahoo Finance Tickers)
@@ -38,17 +26,17 @@ pairs = {
     "ETH/USD": "ETH-USD",
 }
 
-# Sidebar / Selectbox for pair selection
+# Selectbox for pair selection
 selected_pair_name = st.selectbox(
     "Select Trading Instrument:", list(pairs.keys())
 )
 ticker_symbol = pairs[selected_pair_name]
 
 
-@st.cache_data(ttl=300)
+# NOTE: Cache removed completely so it fetches fresh live data on every click!
 def fetch_market_data(symbol):
-  # Fetching intraday historical data optimized for indicators
-  df = yf.download(symbol, period="5d", interval="15m", progress=False)
+  # Using 5m interval for better short-term 10-min analysis
+  df = yf.download(symbol, period="3d", interval="5m", progress=False)
   if isinstance(df.columns, pd.MultiIndex):
     df.columns = df.columns.get_level_values(0)
   return df
@@ -94,16 +82,15 @@ def analyze_market_advanced(df):
     rsi = 100 - (100 / (1 + rs))
 
   rsi_buy, rsi_sell = 0, 0
-  if rsi < 35:  # Oversold (Strong Buy opportunity)
+  if rsi < 40:
     rsi_buy += 5
-  elif rsi > 65:  # Overbought (Strong Sell opportunity)
+  elif rsi > 60:
     rsi_sell += 5
-  elif rsi < 50:
-    rsi_buy += 2
   else:
+    rsi_buy += 2
     rsi_sell += 2
 
-  # --- 3. MACD (Moving Average Convergence Divergence) ---
+  # --- 3. MACD ---
   exp1 = close.ewm(span=12, adjust=False).mean()
   exp2 = close.ewm(span=26, adjust=False).mean()
   macd = exp1 - exp2
@@ -133,7 +120,7 @@ def analyze_market_advanced(df):
   else:
     bb_sell += 2
 
-  # --- Aggregation and Percentage Calculation ---
+  # --- Percentage Calculation ---
   total_buy_score = ma_buy + rsi_buy + macd_buy + bb_buy
   total_sell_score = ma_sell + rsi_sell + macd_sell + bb_sell
   total_score = total_buy_score + total_sell_score
@@ -145,40 +132,32 @@ def analyze_market_advanced(df):
 
   sell_percentage = 100.0 - buy_percentage
 
-  # Decision logic based on multi-indicator score threshold
-  if buy_percentage >= 65:
+  if buy_percentage >= 60:
     summary = "STRONG BUY"
-  elif buy_percentage >= 55:
+  elif buy_percentage >= 53:
     summary = "BUY"
-  elif sell_percentage >= 65:
+  elif sell_percentage >= 60:
     summary = "STRONG SELL"
-  elif sell_percentage >= 55:
+  elif sell_percentage >= 53:
     summary = "SELL"
   else:
     summary = "NEUTRAL"
-
-  total_ma_buy = ma_buy
-  total_ma_sell = ma_sell
-  total_ind_buy = rsi_buy + macd_buy + bb_buy
-  total_ind_sell = rsi_sell + macd_sell + bb_sell
 
   return (
       summary,
       buy_percentage,
       sell_percentage,
-      total_ma_buy,
-      total_ma_sell,
-      total_ind_buy,
-      total_ind_sell,
+      ma_buy,
+      ma_sell,
+      rsi_buy + macd_buy + bb_buy,
+      rsi_sell + macd_sell + bb_sell,
       current_price,
   )
 
 
 # Execution Button
-if st.button("🚀 Generate AI Signal", use_container_width=True):
-  with st.spinner(
-      "Fetching live market feeds & computing multi-indicator AI models..."
-  ):
+if st.button("🚀 Generate Fresh Signal", use_container_width=True):
+  with st.spinner("Fetching live market data and calculating indicators..."):
     df = fetch_market_data(ticker_symbol)
     if not df.empty and "Close" in df.columns:
       (
@@ -196,7 +175,6 @@ if st.button("🚀 Generate AI Signal", use_container_width=True):
       st.subheader(f"📊 Analysis Report for: {selected_pair_name}")
       st.metric(label="Current Live Price", value=f"{price:.4f}")
 
-      # Color-coded UI alerts for signal output
       if "BUY" in summary:
         st.success(
             f"### Signal Summary: {summary}\n- **Buy Probability:** `{buy_pct:.1f}%`"
@@ -213,8 +191,6 @@ if st.button("🚀 Generate AI Signal", use_container_width=True):
             f" \n- **Sell Probability:** `{sell_pct:.1f}%`"
         )
 
-      # Progress bars for percentage visualization
-      st.write("**Chances Breakdown:**")
       st.progress(
           int(buy_pct), text=f"Buy Chances: {buy_pct:.1f}% vs Sell: {sell_pct:.1f}%"
       )
@@ -222,18 +198,13 @@ if st.button("🚀 Generate AI Signal", use_container_width=True):
       st.markdown("---")
       col1, col2 = st.columns(2)
       with col1:
-        st.markdown("**Moving Averages (EMA 9/21):**")
-        st.text(f"Bullish Score: {b_ma} | Bearish Score: {s_ma}")
+        st.markdown("**Moving Averages (EMA):**")
+        st.text(f"Bullish: {b_ma} | Bearish: {s_ma}")
       with col2:
-        st.markdown("**Advanced Indicators (RSI, MACD, BB):**")
-        st.text(f"Bullish Score: {b_ind} | Bearish Score: {s_ind}")
-
-      st.info(
-          "💡 *Note: This bot uses advanced technical indicators to project"
-          " short-term 10-minute trends based on recent candlestick price action.*"
-      )
+        st.markdown("**Advanced Indicators:**")
+        st.text(f"Bullish: {b_ind} | Bearish: {s_ind}")
     else:
       st.error(
-          "⚠️ Data fetch error or market closed for this asset. Please try"
-          " another pair."
+          "⚠️ Could not load data for this asset. Markets might be closed or"
+          " symbol is invalid."
       )
